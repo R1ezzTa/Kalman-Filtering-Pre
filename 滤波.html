@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卡尔曼滤波：从推导到实践 - ZJU信工</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for LaTeX rendering -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; scroll-behavior: smooth; }
+        .math-block { overflow-x: auto; padding: 1rem; background: #f8fafc; border-radius: 0.5rem; border: 1px solid #e2e8f0; }
+        /* Custom scrollbar for code/math blocks */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .nav-item.active { color: #2563eb; border-left: 3px solid #2563eb; font-weight: 600; background-color: #eff6ff; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <!-- 顶部导航 -->
+    <nav class="fixed top-0 w-full bg-white/90 backdrop-blur-md border-b border-slate-200 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span class="bg-blue-600 text-white p-1.5 rounded font-bold text-xl">KF</span>
+                    <span class="font-bold text-xl tracking-tight text-slate-800">卡尔曼滤波详解</span>
+                </div>
+                <div class="hidden md:flex space-x-8 text-sm font-medium text-slate-600">
+                    <a href="#history" class="hover:text-blue-600 transition">历史背景</a>
+                    <a href="#theory" class="hover:text-blue-600 transition">理论推导</a>
+                    <a href="#demo" class="hover:text-blue-600 transition">交互演示</a>
+                    <a href="#analysis" class="hover:text-blue-600 transition">结果分析</a>
+                </div>
+                <div class="text-xs text-slate-400 font-mono">ZJU IE Sophomore</div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto pt-24 pb-12 px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row gap-8">
+
+        <!-- 左侧导航 (桌面端) -->
+        <aside class="hidden md:block w-64 flex-shrink-0 fixed h-[calc(100vh-6rem)] overflow-y-auto pr-4">
+            <nav class="space-y-1">
+                <a href="#history" class="nav-item block px-3 py-2 text-sm font-medium text-slate-600 rounded-r hover:bg-slate-100 transition">1. 历史与背景</a>
+                <a href="#prerequisites" class="nav-item block px-3 py-2 text-sm font-medium text-slate-600 rounded-r hover:bg-slate-100 transition">2. 预备知识</a>
+                <a href="#theory" class="nav-item block px-3 py-2 text-sm font-medium text-slate-600 rounded-r hover:bg-slate-100 transition">3. 核心公式推导</a>
+                <a href="#demo" class="nav-item block px-3 py-2 text-sm font-medium text-slate-600 rounded-r hover:bg-slate-100 transition">4. 交互式实验</a>
+                <a href="#analysis" class="nav-item block px-3 py-2 text-sm font-medium text-slate-600 rounded-r hover:bg-slate-100 transition">5. 演示结果分析</a>
+            </nav>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="md:ml-72 w-full max-w-4xl space-y-12">
+
+            <!-- 1. 历史背景 -->
+            <section id="history" class="scroll-mt-24">
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="p-2 bg-blue-100 rounded-lg text-blue-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <h2 class="text-2xl font-bold text-slate-900">1. 历史与背景：从阿波罗到自动驾驶</h2>
+                    </div>
+
+                    <div class="prose prose-slate max-w-none text-slate-600 leading-relaxed">
+                        <p>
+                            1960年，匈牙利裔美国数学家 <strong>Rudolf E. Kalman</strong> 发表了一篇著名的论文，提出了一种解决离散数据线性滤波问题的递归方法。
+                        </p>
+                        <div class="my-4 p-4 bg-slate-50 border-l-4 border-blue-500 rounded-r italic text-slate-700">
+                            "如何在数据包含噪声、且系统状态不能直接观测的情况下，估计系统的真实状态？"
+                        </div>
+                        <p>
+                            这项技术最著名的高光时刻是在 <strong>阿波罗计划 (Apollo Program)</strong> 中。阿波罗飞船的导航计算机（AGC）仅有极小的内存，无法存储大量的历史数据。卡尔曼滤波的<b>递归特性</b>（只需要上一时刻的状态，不需要所有历史数据）使其成为计算飞船轨道、修正雷达误差的完美选择。
+                        </p>
+                        <p class="mt-4">
+                            今天，从你手机里的GPS定位、扫地机器人的SLAM算法，到马斯克的SpaceX火箭回收，背后运行的核心算法依然是卡尔曼滤波及其变体（如EKF）。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. 预备知识 -->
+            <section id="prerequisites" class="scroll-mt-24">
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-2xl font-bold text-slate-900 mb-6">2. 预备知识：信工学子的工具箱</h2>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div class="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
+                            <h3 class="font-bold text-indigo-900 mb-2">线性代数 (Linear Algebra)</h3>
+                            <ul class="list-disc list-inside text-sm text-indigo-800 space-y-1">
+                                <li><strong>状态向量 ($x$)</strong>: 用列向量表示系统状态（如位置、速度）。</li>
+                                <li><strong>矩阵乘法</strong>: 描述状态如何随时间转移 ($Ax$)。</li>
+                                <li><strong>转置 ($^T$) 与 逆 ($^{-1}$)</strong>: 用于计算增益。</li>
+                            </ul>
+                        </div>
+                        <div class="bg-emerald-50 p-5 rounded-xl border border-emerald-100">
+                            <h3 class="font-bold text-emerald-900 mb-2">概率论 (Probability)</h3>
+                            <ul class="list-disc list-inside text-sm text-emerald-800 space-y-1">
+                                <li><strong>高斯分布 (Normal Distribution)</strong>: 假设噪声服从正态分布 $N(\mu, \sigma^2)$。</li>
+                                <li><strong>协方差矩阵 ($P, Q, R$)</strong>: 在多维情况下，用矩阵表示不确定性（方差）及变量间的相关性。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. 理论推导 -->
+            <section id="theory" class="scroll-mt-24">
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-2xl font-bold text-slate-900 mb-6">3. 核心理论：五个黄金公式</h2>
+                    <p class="text-slate-600 mb-6">卡尔曼滤波本质上是一个 <strong>"预测 (Predict) - 更新 (Update)"</strong> 的循环过程。</p>
+
+                    <!-- 状态空间模型 -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-slate-800 mb-3">3.1 系统模型</h3>
+                        <p class="text-sm text-slate-600 mb-2">我们假设世界是这样运行的：</p>
+                        <div class="math-block text-center text-lg">
+                            $$ x_k = A x_{k-1} + B u_k + w_k $$
+                            $$ z_k = H x_k + v_k $$
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2 text-center">
+                            $x$: 状态 | $z$: 观测值 | $w, v$: 过程噪声与测量噪声 (服从高斯分布)
+                        </p>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <!-- 预测步骤 -->
+                        <div>
+                            <div class="flex items-center gap-2 mb-4">
+                                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded uppercase">Step 1: Predict</span>
+                                <h4 class="font-bold text-slate-700">先验预测 (Time Update)</h4>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-600">1. 预测状态</p>
+                                    <div class="math-block">$$ \hat{x}_k^- = A \hat{x}_{k-1} + B u_k $$</div>
+                                    <p class="text-xs text-slate-500 mt-1">根据物理规律推测下一步位置。</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-600">2. 预测误差协方差</p>
+                                    <div class="math-block">$$ P_k^- = A P_{k-1} A^T + Q $$</div>
+                                    <p class="text-xs text-slate-500 mt-1">不仅预测位置，还要预测不确定性会增加多少(Q)。</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 更新步骤 -->
+                        <div>
+                            <div class="flex items-center gap-2 mb-4">
+                                <span class="bg-green-100 text-green-800 text-xs font-bold px-2 py-1 rounded uppercase">Step 2: Update</span>
+                                <h4 class="font-bold text-slate-700">测量更新 (Measurement Update)</h4>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-600">3. 计算卡尔曼增益 (The Magic)</p>
+                                    <div class="math-block">$$ K_k = \frac{P_k^- H^T}{H P_k^- H^T + R} $$</div>
+                                    <p class="text-xs text-slate-500 mt-1">核心：$R$越大，$K$越小（不信测量）；$P$越大，$K$越大（不信预测）。</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-600">4. 修正状态估计</p>
+                                    <div class="math-block">$$ \hat{x}_k = \hat{x}_k^- + K_k (z_k - H \hat{x}_k^-) $$</div>
+                                    <p class="text-xs text-slate-500 mt-1">最终结果 = 预测值 + 权重 × (观测残差)。</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-600">5. 更新误差协方差</p>
+                                    <div class="math-block">$$ P_k = (I - K_k H) P_k^- $$</div>
+                                    <p class="text-xs text-slate-500 mt-1">观测后，不确定性减小了。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. 交互演示 -->
+            <section id="demo" class="scroll-mt-24">
+                <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                    <div class="p-6 bg-slate-800 text-white flex justify-between items-center">
+                        <div>
+                            <h2 class="text-xl font-bold">4. 交互式实验室 (1D Simulation)</h2>
+                            <p class="text-slate-400 text-sm">模拟场景：一维小车运动，传感器有噪声。</p>
+                        </div>
+                        <div class="flex items-center space-x-4 text-xs">
+                            <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-slate-400 mr-2"></span>真实值</div>
+                            <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-red-500 mr-2"></span>观测值(带噪)</div>
+                            <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-green-500 mr-2"></span>卡尔曼最优估计</div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col lg:flex-row h-[600px]">
+                        <!-- 控制面板 -->
+                        <div class="w-full lg:w-1/3 bg-slate-50 p-6 border-b lg:border-b-0 lg:border-r border-slate-200 overflow-y-auto">
+
+                            <div class="space-y-8">
+                                <!-- R 控制 -->
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <label class="font-bold text-slate-700 text-sm">测量噪声协方差 (R)</label>
+                                        <span id="val-R" class="font-mono text-xs bg-white border px-2 py-1 rounded text-red-600 font-bold">20</span>
+                                    </div>
+                                    <input type="range" id="slider-R" min="1" max="100" value="20" class="w-full accent-red-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                                    <p class="text-xs text-slate-500 mt-2">
+                                        代表传感器的"不可靠程度"。调大它，不仅红点会变得更散，绿线也会变得更"迟钝"（更相信预测）。
+                                    </p>
+                                </div>
+
+                                <!-- Q 控制 -->
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <label class="font-bold text-slate-700 text-sm">过程噪声协方差 (Q)</label>
+                                        <span id="val-Q" class="font-mono text-xs bg-white border px-2 py-1 rounded text-blue-600 font-bold">0.1</span>
+                                    </div>
+                                    <input type="range" id="slider-Q" min="0.01" max="5" step="0.01" value="0.1" class="w-full accent-blue-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                                    <p class="text-xs text-slate-500 mt-2">
+                                        代表系统内部的不确定性（如风扰、摩擦突变）。调大它，绿线会更敏感，敢于迅速跟随变化。
+                                    </p>
+                                </div>
+
+                                <div class="bg-blue-50 p-4 rounded border border-blue-100">
+                                    <h4 class="text-xs font-bold text-blue-800 uppercase mb-2">实时状态</h4>
+                                    <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                                        <div class="text-slate-500">Kalman Gain (K):</div>
+                                        <div id="disp-K" class="font-bold text-slate-800">0.00</div>
+                                        <div class="text-slate-500">Uncertainty (P):</div>
+                                        <div id="disp-P" class="font-bold text-slate-800">0.00</div>
+                                    </div>
+                                </div>
+
+                                <button id="btn-pause" class="w-full py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium shadow-sm transition flex justify-center items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    暂停 / 继续
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 画布 -->
+                        <div class="w-full lg:w-2/3 bg-white relative">
+                            <canvas id="kalmanCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. 结果分析 -->
+            <section id="analysis" class="scroll-mt-24 pb-20">
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-2xl font-bold text-slate-900 mb-6">5. 演示结果分析与思考</h2>
+
+                    <div class="space-y-6">
+                        <div class="border-l-4 border-yellow-400 pl-4 py-1">
+                            <h3 class="font-bold text-lg text-slate-800">Q 与 R 的博弈</h3>
+                            <p class="text-slate-600 mt-2">
+                                卡尔曼滤波最难也是最艺术的地方在于 <b>调参</b>。在代码中你可以直观感受到：
+                            </p>
+                            <ul class="mt-2 list-disc list-inside text-sm text-slate-600 space-y-2">
+                                <li>
+                                    <strong>当 $R \gg Q$ (测量噪声大)</strong>:
+                                    $K \to 0$。滤波器会“无视”传感器的剧烈抖动，更多依赖数学模型的惯性预测。
+                                    <span class="text-green-600 font-medium">优点：曲线极其平滑。缺点：如果有突发情况，反应迟钝（滞后）。</span>
+                                </li>
+                                <li>
+                                    <strong>当 $Q \gg R$ (过程噪声大)</strong>:
+                                    $K \to 1$。滤波器认为“模型预测不准，传感器才是对的”。
+                                    <span class="text-red-600 font-medium">优点：反应极其灵敏。缺点：把噪声也当成信号引进来，曲线毛刺多。</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-slate-50 p-6 rounded-lg">
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">给信工大二学生的建议</h3>
+                            <p class="text-slate-600 text-sm leading-relaxed">
+                                这个演示用的是最简单的 1D 线性模型。在你们后续的大三课程《自动控制原理》或《数字信号处理》中，你们会遇到更复杂的情况：
+                            </p>
+                            <ul class="list-decimal list-inside text-sm text-slate-600 mt-3 space-y-1">
+                                <li>如果系统是非线性的（比如机器人转弯）怎么办？ -> <strong>扩展卡尔曼滤波 (EKF)</strong></li>
+                                <li>如果噪声不是高斯分布怎么办？ -> <strong>粒子滤波 (Particle Filter)</strong></li>
+                            </ul>
+                            <p class="mt-4 text-sm font-medium text-blue-600">
+                                现在，试着回去把 R 拉到最大，看看绿线是如何在乱舞的红点中找到那条“真理”之路的吧！
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- 脚本逻辑 -->
+    <script>
+        // --- 核心算法部分 ---
+        class KalmanFilter {
+            constructor(R, Q, A = 1, B = 0, C = 1) {
+                this.R = R; // 测量噪声
+                this.Q = Q; // 过程噪声
+                this.A = A; // 状态转移
+                this.B = B; // 控制
+                this.C = C; // 观测
+                this.x = 0; // 状态估计
+                this.P = 1; // 误差协方差
+            }
+
+            predict(u = 0) {
+                this.x = this.A * this.x + this.B * u;
+                this.P = this.A * this.P * this.A + this.Q;
+            }
+
+            update(z) {
+                const K = this.P / (this.P + this.R);
+                this.x = this.x + K * (z - this.x);
+                this.P = (1 - K) * this.P;
+                return { estimate: this.x, gain: K, uncertainty: this.P };
+            }
+
+            setR(newR) { this.R = newR; }
+            setQ(newQ) { this.Q = newQ; }
+        }
+
+        // --- 绘图与交互部分 ---
+        const canvas = document.getElementById('kalmanCanvas');
+        const ctx = canvas.getContext('2d');
+        const kf = new KalmanFilter(20, 0.1);
+
+        let width, height;
+        let isPaused = false;
+        let time = 0;
+        const maxPoints = 400;
+        const data = { truePath: [], measurements: [], estimates: [], uncertaintyHigh: [], uncertaintyLow: [] };
+
+        // UI Elements
+        const sliderR = document.getElementById('slider-R');
+        const valR = document.getElementById('val-R');
+        const sliderQ = document.getElementById('slider-Q');
+        const valQ = document.getElementById('val-Q');
+        const dispK = document.getElementById('disp-K');
+        const dispP = document.getElementById('disp-P');
+        const btnPause = document.getElementById('btn-pause');
+
+        // Events
+        sliderR.addEventListener('input', (e) => { const v = parseFloat(e.target.value); kf.setR(v); valR.innerText = v; });
+        sliderQ.addEventListener('input', (e) => { const v = parseFloat(e.target.value); kf.setQ(v); valQ.innerText = v; });
+        btnPause.addEventListener('click', () => isPaused = !isPaused);
+
+        // Gaussian Random
+        function randn_bm() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random();
+            while(v === 0) v = Math.random();
+            return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+        }
+
+        function resize() {
+            // 获取父容器尺寸
+            const parent = canvas.parentElement;
+            width = parent.offsetWidth;
+            height = parent.offsetHeight;
+
+            // 处理 Retina 屏幕清晰度
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+
+            // 样式宽高
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+        }
+        window.addEventListener('resize', resize);
+        // 初始化尺寸
+        setTimeout(resize, 100);
+
+        function update() {
+            if (isPaused) return;
+
+            // 1. 生成真实数据 (正弦波 + 随机游走趋势)
+            const centerY = height / 2;
+            const scaleY = height / 4;
+            const trueVal = centerY + Math.sin(time * 0.04) * scaleY + Math.cos(time * 0.01) * (scaleY * 0.5);
+
+            // 2. 生成测量数据 (加噪声)
+            // 视觉上我们让噪声幅度稍微夸张一点，便于观察
+            const noise = randn_bm() * Math.sqrt(kf.R * 8);
+            const measurement = trueVal + noise;
+
+            // 3. 卡尔曼滤波
+            kf.predict();
+            const result = kf.update(measurement);
+
+            // 更新显示数值
+            dispK.innerText = result.gain.toFixed(3);
+            dispP.innerText = result.uncertainty.toFixed(2);
+
+            // 存数据
+            data.truePath.push(trueVal);
+            data.measurements.push(measurement);
+            data.estimates.push(result.estimate);
+
+            const sigma = Math.sqrt(result.uncertainty) * 4;
+            data.uncertaintyHigh.push(result.estimate + sigma);
+            data.uncertaintyLow.push(result.estimate - sigma);
+
+            if (data.truePath.length > maxPoints) {
+                data.truePath.shift();
+                data.measurements.shift();
+                data.estimates.shift();
+                data.uncertaintyHigh.shift();
+                data.uncertaintyLow.shift();
+            }
+            time++;
+        }
+
+        function draw() {
+            // 清屏 (使用逻辑宽高)
+            ctx.clearRect(0, 0, width, height);
+
+            if (data.truePath.length < 2) return;
+
+            const stepX = width / maxPoints;
+
+            // 1. 绘制网格
+            ctx.strokeStyle = '#f1f5f9';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i=0; i<width; i+=50) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
+            for(let i=0; i<height; i+=50) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
+            ctx.stroke();
+
+            // 2. 绘制不确定性 (阴影)
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+            ctx.beginPath();
+            ctx.moveTo(0, data.uncertaintyHigh[0]);
+            for (let i = 1; i < data.uncertaintyHigh.length; i++) ctx.lineTo(i * stepX, data.uncertaintyHigh[i]);
+            for (let i = data.uncertaintyLow.length - 1; i >= 0; i--) ctx.lineTo(i * stepX, data.uncertaintyLow[i]);
+            ctx.closePath();
+            ctx.fill();
+
+            // 3. 绘制真实路径 (灰黑实线)
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]); // 虚线表示这是"上帝视角"，实际不可知
+            ctx.beginPath();
+            ctx.moveTo(0, data.truePath[0]);
+            for (let i = 1; i < data.truePath.length; i++) ctx.lineTo(i * stepX, data.truePath[i]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 4. 绘制测量点 (红点)
+            ctx.fillStyle = '#ef4444';
+            for (let i = 0; i < data.measurements.length; i++) {
+                // 只绘制最近的一些点以提高性能，或者每隔几个点画一个
+                if (i % 2 === 0) {
+                    ctx.beginPath();
+                    ctx.arc(i * stepX, data.measurements[i], 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // 5. 绘制估计路径 (绿实线)
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, data.estimates[0]);
+            for (let i = 1; i < data.estimates.length; i++) ctx.lineTo(i * stepX, data.estimates[i]);
+            ctx.stroke();
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // 启动
+        resize();
+        loop();
+
+        // 导航高亮逻辑
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.getAttribute('id');
+                    document.querySelectorAll('.nav-item').forEach(link => {
+                        link.classList.remove('active');
+                        if (link.getAttribute('href') === '#' + id) {
+                            link.classList.add('active');
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('section').forEach(section => {
+            observer.observe(section);
+        });
+
+    </script>
+</body>
+</html>
